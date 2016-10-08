@@ -2,6 +2,14 @@ from PIL import Image, ImageFilter
 import numpy as np
 import train_tf as tf
 
+# ########################################################################
+# The code for figuring out where the board starts/ends and where the solution
+# blocks start/end is pretty hacky. I've only tested on a samsung s5, so
+# if the board images are different sizes on other devices, these methods
+# will likely break.
+# ########################################################################
+
+
 CLASS_IMG_SIZE = (32, 32)
 START_ROW = 340
 END_ROW = 1400
@@ -9,6 +17,7 @@ PIXEL_THRESH = 700
 
 
 def convert_to_bw(image):
+    """convert a color image to black and white"""
     gray = image.convert('L')
     bw_image = gray.point(lambda x: 0 if x < 128 else 255, '1')
     return bw_image
@@ -128,6 +137,7 @@ def parse_image(image):
     width, height = image.size
     rows = sum_pixel_rows(image)
 
+    # TODO: test these offsets on pictures taken from other devices
     start_row = _find_edge(rows, PIXEL_THRESH, START_ROW, START_ROW + 50)
     end_row = _find_edge(rows, PIXEL_THRESH, END_ROW, END_ROW + 50)
 
