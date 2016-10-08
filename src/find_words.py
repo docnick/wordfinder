@@ -2,7 +2,6 @@ import numpy as np
 from collections import defaultdict
 import time
 import threading
-import board_utils as board
 import image_utils
 import trie.config_tries as trie
 import file_utils as futil
@@ -13,7 +12,11 @@ MOVES = np.array([-1, 0, 1])
 EMPTY_CELL = '@'
 TRIES = {}
 
+# file where we look for user hints
 HINT_FILE = 'hints.txt'
+# if hint is prefixed with an 'x', it should be excluded,
+# if it is prefixed with an 'i', it should be included
+# e.g. x:cupboards -> cupboards is NOT part of the solution
 EXCLUDE_PREFIX = 'x'
 INCLUDE_PREFIX = 'i'
 
@@ -89,6 +92,14 @@ def _get_trie(word_len):
 
 
 def find_paths(matrix, position, path_length, exclude_set=set()):
+    """
+    Iterative algorithm for finding all valid words of a given length given a starting position
+    :param matrix:
+    :param position:
+    :param path_length:
+    :param exclude_set:
+    :return:
+    """
     height, width = matrix.shape
 
     paths = []
@@ -99,6 +110,7 @@ def find_paths(matrix, position, path_length, exclude_set=set()):
         pos_set = word.get_path_set()
         for neighbor in _transition(word.get_path()[-1], height, width):
             if neighbor in pos_set:
+                # can't revisit a letter
                 continue
 
             v = matrix[neighbor[0], neighbor[1]]
@@ -114,6 +126,7 @@ def find_paths(matrix, position, path_length, exclude_set=set()):
 
             if trie.has_keys_with_prefix(str(tmp_word)):
                 if tmp_word.length() == path_length:
+                    # TODO: need to get smarter about how we use hints about words that are part of the solution
                     if str(tmp_word) not in exclude_set and str(tmp_word) in trie:
                         paths.append(tmp_word)
 
@@ -212,6 +225,11 @@ def _purge_stack(stack, letter_counts, exclude_set, solution_set):
 
     for board, word_lengths, solution in stack:
         if _is_solution_valid(solution, exclude_set):
+            #
+            # Since we don't know the order of the words in the solution set, we just remove the ability
+            # of using those letters in part of another word. For example if our board contains 2 'z's
+            # and we know that 'puzzle' is part of the solution set, we shouldn't accept any other words
+            # containing a 'z' (e.g. 'zoo') in a solution since these letters are already used up
             if _valid_letters(_get_diff(solution, solution_set), board_letter_count.copy()):
                 purged_stack.append((board, word_lengths, solution))
 
@@ -250,11 +268,13 @@ def solve_board(board, word_lengths, solution=[]):
                 if len(word_lengths) > 1:
                     stack.append((board_copy, word_lengths[:-1], solution + [word]))
 
+                # periodically purge the stack given our set of hints
                 if IS_NEW_HINT or iters % 1000 == 0:
                     stack = _purge_stack(stack, letter_count, EXCLUDE_SET, SOLUTION_SET)
                     if IS_NEW_HINT:
                         IS_NEW_HINT = False
 
+                # this is just here for logging so the user knows what's going on
                 if iters % 5000 == 0:
                     e = time.time()
                     print('\nStack = {}\tIter = {}\tTime = {}\n'.format(len(stack), iters, e - s))
@@ -302,7 +322,8 @@ def process_image(image_name):
 
 def file_reader():
     """
-    Read from hint file and
+    Read from hint file and update EXCLUDE and SOLUTION sets
+    This is excuted in a separate thread
     :return:
     """
     prev_exclude_len = 0
@@ -338,43 +359,31 @@ if __name__ == '__main__':
 
     TRIES = load_words()
 
-    # grab the latest image from this folder, parse it, and begin solving the puzzle
-    image_name = futil.find_latest_image('/Users/nlarusso/Dropbox (Personal)/Camera Uploads/')
+    #
+    # File path from which to fetch an image of the board
+    #
+    image_path = '/Users/nlarusso/Dropbox (Personal)/Camera Uploads/'
+
+    # Grab the latest image from this folder and parse it
+    image_name = futil.find_latest_image(image_path)
     board, solution_word_lens = process_image(image_name)
 
-#     board_str = """
-# ipt@
-# tcs@
-# rueo
-# pein
-# ecom
-# rend
-# """
-#
-#     solution_word_lens = [8, 7, 7]
-#     board = board.parse_board(board_str)
-
-    # -- just solve single word --
-    #
-    # unique_words = {}
-    # for word, path in evaluate_all_words(board, 5):
-    #     if word not in unique_words:
-    #         unique_words[word] = [[path]]
-    #     else:
-    #         unique_words[word].append(path)
-    #
-    # for w, p in unique_words.items():
-    #     print(w, p)
-
+    # kick off the extra thread to read in any hints from the user
     t = threading.Thread(target=file_reader)
     t.daemon = True  # thread dies when main thread (only non-daemon thread) exits.
     t.start()
 
+    #
+    # Start solving the puzzle!!!
+    #
     s = time.time()
     results = solve_game(board, solution_word_lens)
     e = time.time()
     print('{} seconds total'.format(e - s))
 
+    #
+    # Print the possible solutions with some pretty formatting!
+    #
     res_words = {}
     for words in results:
         w = '-'.join([str(word) for word in words])
