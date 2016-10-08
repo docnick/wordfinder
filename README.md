@@ -10,7 +10,8 @@ This code will:
 ## Getting started:
 You'll need to do a few things before using the code:
 
-1. Install the requirements.
+1. Install the requirements. I developed and tested python 3.5 `mkvirtualenv --python=/usr/local/bin/python3.5 wordfinder3`, though everything should work for 2.7 as well.
+    `> pip install -r requirements.txt`
 2. Build the Tries: these are lookups on valid English words.
     
     0. Make sure you have your word list: `word_data/words.dat`
@@ -23,7 +24,7 @@ You'll need to do a few things before using the code:
 
 
 ## Running the program
-1) run `python find_words.py`, this will parse the image, extract the board, identify word lengths for the solution, and solve the puzzle
+Run `python find_words.py`, this will parse the image, extract the board, identify word lengths for the solution, and solve the puzzle
 
 
 ## TODO:
