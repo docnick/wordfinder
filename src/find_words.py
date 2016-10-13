@@ -22,6 +22,7 @@ INCLUDE_PREFIX = 'i'
 
 EXCLUDE_SET = set()
 SOLUTION_SET = set()
+SOLUTION_DICT = {}
 IS_NEW_HINT = False
 
 
@@ -91,7 +92,7 @@ def _get_trie(word_len):
     return TRIES.get(str(word_len))
 
 
-def find_paths(matrix, position, path_length, exclude_set=set()):
+def find_paths(matrix, position, path_length, solution_word=None, exclude_set=set()):
     """
     Iterative algorithm for finding all valid words of a given length given a starting position
     :param matrix:
@@ -120,13 +121,17 @@ def find_paths(matrix, position, path_length, exclude_set=set()):
             tmp_word = word + (v, neighbor)
             trie = _get_trie(tmp_word.length())
 
+            # we know the solution word!
+            if solution_word:
+                if tmp_word.get_word() != solution_word[:tmp_word.length()]:
+                    continue
+
             if trie is None:
                 # something bad happened
                 print(tmp_word)
 
             if trie.has_keys_with_prefix(str(tmp_word)):
                 if tmp_word.length() == path_length:
-                    # TODO: need to get smarter about how we use hints about words that are part of the solution
                     if str(tmp_word) not in exclude_set and str(tmp_word) in trie:
                         paths.append(tmp_word)
 
@@ -136,7 +141,7 @@ def find_paths(matrix, position, path_length, exclude_set=set()):
     return paths
 
 
-def evaluate_all_words(matrix, word_length, exclude_set=set()):
+def evaluate_all_words(matrix, word_length, solution_word=None, exclude_set=set()):
     height, width = matrix.shape
 
     for i in range(width):
@@ -144,8 +149,12 @@ def evaluate_all_words(matrix, word_length, exclude_set=set()):
             if matrix[j, i] == EMPTY_CELL:
                 continue
 
+            if solution_word:
+                if matrix[j, i] != solution_word[0]:
+                    continue
+
             start = (j, i)
-            for word in find_paths(matrix, start, word_length, exclude_set):
+            for word in find_paths(matrix, start, word_length, solution_word, exclude_set):
                 yield word
 
 
@@ -215,6 +224,16 @@ def _get_diff(solution, solution_set):
     return letters
 
 
+def _is_solution_valid_with_hints(solution, solution_dict):
+
+    for i, word in enumerate(solution):
+        if solution_dict.get(i) is not None:
+            if word.get_word() != solution_dict.get(i):
+                return False
+
+    return True
+
+
 def _purge_stack(stack, letter_counts, exclude_set, solution_set):
     purged_stack = []
 
@@ -223,15 +242,22 @@ def _purge_stack(stack, letter_counts, exclude_set, solution_set):
         for w in list(word):
             board_letter_count[w] -= 1
 
-    for board, word_lengths, solution in stack:
+    for board, word_lengths, solution, solution_word in stack:
         if _is_solution_valid(solution, exclude_set):
+
+            if _is_solution_valid_with_hints(solution, SOLUTION_DICT):
+                solution_offset = len(solution)
+                solution_word = SOLUTION_DICT.get(solution_offset)
+                purged_stack.append((board, word_lengths, solution, solution_word))
+
             #
             # Since we don't know the order of the words in the solution set, we just remove the ability
             # of using those letters in part of another word. For example if our board contains 2 'z's
             # and we know that 'puzzle' is part of the solution set, we shouldn't accept any other words
             # containing a 'z' (e.g. 'zoo') in a solution since these letters are already used up
-            if _valid_letters(_get_diff(solution, solution_set), board_letter_count.copy()):
-                purged_stack.append((board, word_lengths, solution))
+            # if _valid_letters(_get_diff(solution, solution_set), board_letter_count.copy()):
+            #
+            #     purged_stack.append((board, word_lengths, solution))
 
     return purged_stack
 
@@ -250,11 +276,14 @@ def solve_board(board, word_lengths, solution=[]):
 
     s = time.time()
     letter_count = _get_letter_count(board)
-    stack = [(board, word_lengths, solution)]
+    stack = [(board, word_lengths, solution, None)]
     try:
         while stack:
-            board, word_lengths, solution = stack.pop()
-            for word in evaluate_all_words(board, word_lengths[-1], EXCLUDE_SET):
+            board, word_lengths, solution, solution_word = stack.pop()
+            for word in evaluate_all_words(board, word_lengths[-1], solution_word, EXCLUDE_SET):
+
+                if 'cufflink' in solution and 'saw' in solution:
+                    print(word, solution)
 
                 # remove word from board
                 board_copy = remove_word(np.copy(board), word.get_path())
@@ -266,10 +295,13 @@ def solve_board(board, word_lengths, solution=[]):
                         results.append(solution + [word])
 
                 if len(word_lengths) > 1:
-                    stack.append((board_copy, word_lengths[:-1], solution + [word]))
+                    solution_offset = len(solution) + 1
+                    solution_word = SOLUTION_DICT.get(solution_offset)
+                    stack.append((board_copy, word_lengths[:-1], solution + [word], solution_word))
 
                 # periodically purge the stack given our set of hints
                 if IS_NEW_HINT or iters % 1000 == 0:
+                    # stack = _purge_stack(stack, letter_count, word_lengths, EXCLUDE_SET, SOLUTION_SET)
                     stack = _purge_stack(stack, letter_count, EXCLUDE_SET, SOLUTION_SET)
                     if IS_NEW_HINT:
                         IS_NEW_HINT = False
@@ -344,6 +376,9 @@ def file_reader():
                     EXCLUDE_SET.add(vs[1])
                 elif vs[0] == 'i':
                     SOLUTION_SET.add(vs[1])
+                elif vs[0].isdigit:
+                    SOLUTION_SET.add(vs[1])
+                    SOLUTION_DICT[int(vs[0]) - 1] = vs[1]
 
         if len(EXCLUDE_SET) > prev_exclude_len or len(SOLUTION_SET) > prev_solution_len:
             # something changed!
