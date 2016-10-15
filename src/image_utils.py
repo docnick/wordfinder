@@ -1,4 +1,4 @@
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageOps
 import numpy as np
 import train_tf as tf
 
@@ -13,7 +13,7 @@ import train_tf as tf
 CLASS_IMG_SIZE = (32, 32)
 START_ROW = 340
 END_ROW = 1400
-PIXEL_THRESH = 700
+PIXEL_THRESH = 500
 
 
 def convert_to_bw(image):
@@ -168,8 +168,14 @@ def extract_letters(board, classification=None):
     letters = []
     for i, cpos in enumerate(col_edges):
         for j, rpos in enumerate(row_edges):
-            letter = board.crop((rpos[0] + buffer , cpos[0] + buffer, rpos[1] - buffer, cpos[1] - buffer))
+
+            letter = board.crop((rpos[0] + buffer, cpos[0] + buffer, rpos[1] - buffer, cpos[1] - buffer))
             letter.thumbnail(CLASS_IMG_SIZE, Image.ANTIALIAS)
+
+            if letter.size != CLASS_IMG_SIZE:
+                print('image not correct size, fixing...')
+                letter = ImageOps.fit(letter, (32, 32), Image.ANTIALIAS)
+                print(letter.size)
 
             letter_obj = {'image': letter, 'x': i, 'y': j}
             if classification is not None:
