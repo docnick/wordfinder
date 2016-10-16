@@ -262,6 +262,23 @@ def _purge_stack(stack, letter_counts, exclude_set, solution_set):
     return purged_stack
 
 
+def _purge_results(results, letter_counts, exclude_set, solution_set):
+    purged_results = []
+
+    board_letter_count = letter_counts.copy()
+    for word in solution_set:
+        for w in list(word):
+            board_letter_count[w] -= 1
+
+    for solution in results:
+        if _is_solution_valid(solution, exclude_set):
+
+            if _is_solution_valid_with_hints(solution, SOLUTION_DICT):
+                purged_results.append(solution)
+
+    return purged_results
+
+
 def _get_letter_count(board):
     letters = defaultdict(int)
     for l in board.flatten().tolist()[0]:
@@ -303,11 +320,13 @@ def solve_board(board, word_lengths, solution=[]):
                 if IS_NEW_HINT or iters % 1000 == 0:
                     # stack = _purge_stack(stack, letter_count, word_lengths, EXCLUDE_SET, SOLUTION_SET)
                     stack = _purge_stack(stack, letter_count, EXCLUDE_SET, SOLUTION_SET)
+                    results = _purge_results(results, letter_count, EXCLUDE_SET, SOLUTION_SET)
+
                     if IS_NEW_HINT:
                         IS_NEW_HINT = False
 
                 # this is just here for logging so the user knows what's going on
-                if iters % 5000 == 0:
+                if iters % 1000 == 0:
                     e = time.time()
                     print('\nStack = {}\tIter = {}\tTime = {}\n'.format(len(stack), iters, e - s))
                     s = time.time()
