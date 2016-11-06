@@ -6,6 +6,8 @@ import image_utils
 import trie.config_tries as trie
 import file_utils as futil
 from functools import lru_cache
+import random
+from word import Word
 
 
 MOVES = np.array([-1, 0, 1])
@@ -24,42 +26,6 @@ EXCLUDE_SET = set()
 SOLUTION_SET = set()
 SOLUTION_DICT = {}
 IS_NEW_HINT = False
-
-
-class Word:
-    """
-    Class encapsulates the path and the string of a word found on the board
-    """
-
-    def __init__(self, word="", path=[]):
-        self._word_str = word
-        if type(path) != list:
-            path = [path]
-        self._word_path = path
-
-    def __add__(self, other):
-        # we add to a tuple rather than another word
-        word = self._word_str + other[0]
-        path = self._word_path + [other[1]]
-        return Word(word, path)
-
-    def length(self):
-        return len(self._word_str)
-
-    def get_path(self):
-        return self._word_path
-
-    def get_path_set(self):
-        return set(self._word_path)
-
-    def get_word(self):
-        return self._word_str
-
-    def __repr__(self):
-        return self._word_str
-
-    def __str__(self):
-        return self._word_str
 
 
 @lru_cache(32)
@@ -98,6 +64,7 @@ def find_paths(matrix, position, path_length, solution_word=None, exclude_set=se
     :param matrix:
     :param position:
     :param path_length:
+    :param solution_word:
     :param exclude_set:
     :return:
     """
@@ -242,6 +209,7 @@ def _purge_stack(stack, letter_counts, exclude_set, solution_set):
         for w in list(word):
             board_letter_count[w] -= 1
 
+    random.shuffle(stack)
     for board, word_lengths, solution, solution_word in stack:
         if _is_solution_valid(solution, exclude_set):
 
@@ -249,15 +217,6 @@ def _purge_stack(stack, letter_counts, exclude_set, solution_set):
                 solution_offset = len(solution)
                 solution_word = SOLUTION_DICT.get(solution_offset)
                 purged_stack.append((board, word_lengths, solution, solution_word))
-
-            #
-            # Since we don't know the order of the words in the solution set, we just remove the ability
-            # of using those letters in part of another word. For example if our board contains 2 'z's
-            # and we know that 'puzzle' is part of the solution set, we shouldn't accept any other words
-            # containing a 'z' (e.g. 'zoo') in a solution since these letters are already used up
-            # if _valid_letters(_get_diff(solution, solution_set), board_letter_count.copy()):
-            #
-            #     purged_stack.append((board, word_lengths, solution))
 
     return purged_stack
 
@@ -294,13 +253,12 @@ def solve_board(board, word_lengths, solution=[]):
     s = time.time()
     letter_count = _get_letter_count(board)
     stack = [(board, word_lengths, solution, None)]
+
     try:
         while stack:
             board, word_lengths, solution, solution_word = stack.pop()
-            for word in evaluate_all_words(board, word_lengths[-1], solution_word, EXCLUDE_SET):
 
-                if 'cufflink' in solution and 'saw' in solution:
-                    print(word, solution)
+            for word in evaluate_all_words(board, word_lengths[-1], solution_word, EXCLUDE_SET):
 
                 # remove word from board
                 board_copy = remove_word(np.copy(board), word.get_path())
@@ -317,8 +275,7 @@ def solve_board(board, word_lengths, solution=[]):
                     stack.append((board_copy, word_lengths[:-1], solution + [word], solution_word))
 
                 # periodically purge the stack given our set of hints
-                if IS_NEW_HINT or iters % 1000 == 0:
-                    # stack = _purge_stack(stack, letter_count, word_lengths, EXCLUDE_SET, SOLUTION_SET)
+                if IS_NEW_HINT or iters % 2500 == 0:
                     stack = _purge_stack(stack, letter_count, EXCLUDE_SET, SOLUTION_SET)
                     results = _purge_results(results, letter_count, EXCLUDE_SET, SOLUTION_SET)
 
@@ -326,7 +283,7 @@ def solve_board(board, word_lengths, solution=[]):
                         IS_NEW_HINT = False
 
                 # this is just here for logging so the user knows what's going on
-                if iters % 1000 == 0:
+                if iters % 3000 == 0:
                     e = time.time()
                     print('\nStack = {}\tIter = {}\tTime = {}\n'.format(len(stack), iters, e - s))
                     s = time.time()
@@ -334,6 +291,7 @@ def solve_board(board, word_lengths, solution=[]):
                     print('Exclude set: ', EXCLUDE_SET)
                     print("Current solution: ", solution + [word])
                     print('-------')
+
     except KeyboardInterrupt:
         print('Exiting and printing solutions...')
 
@@ -410,7 +368,6 @@ def file_reader():
 
 
 if __name__ == '__main__':
-
     TRIES = load_words()
 
     #
